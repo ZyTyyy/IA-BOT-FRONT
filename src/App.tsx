@@ -9,6 +9,11 @@ type Topic =
   | "hotel"
   | "weather";
 
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 const SPLASH_FADE_AT = 3000;
 const SPLASH_HIDE_AT = 3500;
 
@@ -18,6 +23,11 @@ function App() {
   const [isOrbitPaused, setOrbitPaused] = useState(false);
   const [isSplashVisible, setSplashVisible] = useState(true);
   const [isSplashFading, setSplashFading] = useState(false);
+
+  /* 🔥 AJOUT CHAT */
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [userInput, setUserInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const topicQuestions: Record<Topic, string> = {
     budget: "Quel budget souhaitez-vous consacrer a votre voyage ?",
@@ -30,11 +40,15 @@ function App() {
 
   const toggleTopic = (topic: Topic) => {
     setSelectedTopics((prev) =>
-      prev.includes(topic) ? prev.filter((item) => item !== topic) : [...prev, topic]
+      prev.includes(topic)
+        ? prev.filter((item) => item !== topic)
+        : [...prev, topic]
     );
   };
 
-  const selectedQuestions = selectedTopics.map((topic) => topicQuestions[topic]);
+  const selectedQuestions = selectedTopics.map(
+    (topic) => topicQuestions[topic]
+  );
 
   useEffect(() => {
     const fadeTimer = window.setTimeout(() => {
@@ -50,6 +64,47 @@ function App() {
       window.clearTimeout(hideTimer);
     };
   }, []);
+
+  const sendMessage = async () => {
+    if (!userInput.trim() || isLoading) return;
+
+    const userMessage: ChatMessage = {
+      role: "user",
+      content: userInput,
+    };
+
+    setChatMessages((prev) => [...prev, userMessage]);
+    setUserInput("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("http://localhost:8000/agent/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage.content }),
+      });
+
+      const data = await response.json();
+
+      const aiMessage: ChatMessage = {
+        role: "assistant",
+        content: data.answer ?? "Je n'ai pas compris votre demande.",
+      };
+
+      setChatMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Une erreur est survenue lors de la communication avec le serveur.",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="app">
@@ -77,19 +132,6 @@ function App() {
           </div>
         </div>
       </nav>
-      {isSplashVisible && (
-        <section className={`splash ${isSplashFading ? "splash--fade" : ""}`}>
-          <div className="splash-inner">
-            <img
-              className="splash-logo"
-              src="/logo%20voyage%20.png"
-              alt="Logo Travelia"
-            />
-            <h1 className="splash-title">TRAVELIA</h1>
-            <p>On planifie, on raisonne, vous profitez.</p>
-          </div>
-        </section>
-      )}
 
       {view === "prompt" ? (
         <main className="prompt">
@@ -175,50 +217,49 @@ function App() {
       ) : (
         <main className="conversation">
           <div className="conversation-grid">
-            <section className="prompt-card" aria-labelledby="prompt-title">
-              <div>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => setView("conversation")}
-                  aria-hidden={view !== "detail"}
-                  disabled={view !== "detail"}
-                >
-                  Retour
-                </button>
-                <p className="eyebrow">Prompt IA</p>
-                <h1 id="prompt-title">
-                  Votre assistant personnel de voyage
-                </h1>
-                <p className="lead">
-                  {view === "detail"
-                    ? "Selectionnez une ou plusieurs icones a droite."
-                    : "Selectionnez une icone a droite pour personnaliser le prompt."}
-                </p>
-              </div>
-              <ul className="question-list" aria-label="Questions personnalisees">
-                {selectedQuestions.length > 0 ? (
-                  selectedQuestions.map((question) => (
-                    <li key={question}>{question}</li>
-                  ))
-                ) : (
-                  <li>Choisissez une ou plusieurs icones pour demarrer.</li>
+            <section className="prompt-card">
+              <h1>Mon conseiller de voyage</h1>
+
+              <ul className="question-list">
+                {chatMessages.length === 0 && (
+                  <li>Posez votre question pour commencer.</li>
                 )}
+                {chatMessages.map((msg, index) => (
+                  <li key={index}>
+                    <strong>
+                      {msg.role === "user" ? "Vous" : "Travelia"} :
+                    </strong>{" "}
+                    {msg.content}
+                  </li>
+                ))}
               </ul>
+
               <div className="prompt-input">
-                <label htmlFor="prompt-text">Votre reponse</label>
+                <label htmlFor="prompt-text">Votre message</label>
                 <textarea
                   id="prompt-text"
-                  name="prompt-text"
-                  placeholder="Exemple : 7 jours en Italie, budget moyen, rythme equilibre."
+                  placeholder="Ex : 7 jours au Portugal en mai, budget moyen."
                   rows={4}
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.ctrlKey) {
+                      sendMessage();
+                    }
+                  }}
                 />
-                <button className="primary" type="button">
-                  Mettre a jour le trajet
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={sendMessage}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Analyse en cours..." : "Envoyer"}
                 </button>
               </div>
             </section>
-            <section className="map-card" aria-label="Carte">
+
+           <section className="map-card" aria-label="Carte">
               <div className="map-frame">
                 <div className={`orbit ${isOrbitPaused ? "orbit--paused" : ""}`}>
                   <div className="orbit-center">
@@ -365,6 +406,12 @@ function App() {
           </div>
         </main>
       )}
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>© 2025 Travelia</span>
+          <span>Votre assistant de voyage intelligent</span>
+        </div>
+      </footer>
     </div>
   );
 }
