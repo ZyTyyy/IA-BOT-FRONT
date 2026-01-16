@@ -873,3 +873,16 @@ button.ghost:disabled {
 
   text-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
 }
+
+.destination-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px; /* optionnel mais stylé */
+}
+
+.destination-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
